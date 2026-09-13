@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Environment
+.env
+backend/.env
+frontend/.env
+frontend/.env.local
+frontend/.agents
+frontend/.next
+
+
+# Node
+node_modules/
+frontend/dist/
+frontend/node_modules/
+
+
+
+# GEE auth
+.config/
+credentials.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Docker
+*.log
+backend/agri_data.sqlite3
