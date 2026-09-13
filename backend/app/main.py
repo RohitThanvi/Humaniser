@@ -96,6 +96,7 @@ async def humanize_endpoint(
                 "paragraphs_skipped_image": stats.paragraphs_skipped_image,
                 "paragraphs_skipped_reference": stats.paragraphs_skipped_reference,
                 "paragraphs_fallback_unmask_failed": stats.paragraphs_fallback_unmask_failed,
+                "paragraphs_llm_failed": stats.paragraphs_llm_failed,
                 "paragraphs_retried": stats.paragraphs_retried,
                 "sentences_total": stats.sentences_total,
                 "sentences_protected": stats.sentences_protected,

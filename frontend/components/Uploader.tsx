@@ -2,7 +2,7 @@
 
 import { useAuth } from "@clerk/nextjs";
 import { useCallback, useState } from "react";
-import { downloadUrlFor, humanizeDocument, type HumanizeStats } from "@/lib/api";
+import { fetchDownloadBlobUrl, humanizeDocument, type HumanizeStats } from "@/lib/api";
 
 type Status = "idle" | "uploading" | "done" | "error";
 
@@ -19,6 +19,7 @@ export default function Uploader() {
     setStatus("idle");
     setStats(null);
     setDownloadUrl(null);
+    setJobId(null);
     setError(null);
   };
 
@@ -45,7 +46,9 @@ export default function Uploader() {
     try {
       const result = await humanizeDocument(file, () => getToken());
       setStats(result.stats);
-      setDownloadUrl(downloadUrlFor(result.job_id));
+      setJobId(result.job_id);
+      const blobUrl = await fetchDownloadBlobUrl(result.job_id, () => getToken());
+      setDownloadUrl(blobUrl);
       setStatus("done");
     } catch (e: any) {
       setError(e.message || "Something went wrong.");
@@ -117,6 +120,7 @@ export default function Uploader() {
             <Stat label="Sentences humanized" value={stats.sentences_humanized} />
             <Stat label="Citations/science protected" value={stats.sentences_protected} />
             <Stat label="Paragraphs auto-retried" value={stats.paragraphs_retried} />
+            <Stat label="Paragraphs LLM failed" value={stats.paragraphs_llm_failed} />
           </dl>
           <div className="mt-4 rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-600">
             <span className="font-medium text-slate-800">Sentence-length variation (burstiness):</span>{" "}
@@ -127,6 +131,7 @@ export default function Uploader() {
           </div>
           <a
             href={downloadUrl}
+            download="humanized.docx"
             className="mt-6 inline-block rounded-lg bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-700"
           >
             Download humanized.docx

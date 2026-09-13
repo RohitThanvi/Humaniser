@@ -6,6 +6,7 @@ export type HumanizeStats = {
   paragraphs_skipped_image: number;
   paragraphs_skipped_reference: number;
   paragraphs_fallback_unmask_failed: number;
+  paragraphs_llm_failed: number;
   paragraphs_retried: number;
   sentences_total: number;
   sentences_protected: number;
@@ -48,4 +49,23 @@ export async function humanizeDocument(
 
 export function downloadUrlFor(jobId: string): string {
   return `${API_BASE}/api/download/${jobId}`;
+}
+
+// A plain <a href> to this URL won't carry the Clerk session, so when auth
+// is required the backend will 401 on the actual click. Fetch the file with
+// the bearer token attached and hand back a local blob URL instead.
+export async function fetchDownloadBlobUrl(
+  jobId: string,
+  getToken: () => Promise<string | null>
+): Promise<string> {
+  const token = await getToken();
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  const res = await fetch(downloadUrlFor(jobId), { headers });
+  if (!res.ok) {
+    throw new Error("Download failed — the job may have expired.");
+  }
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
 }

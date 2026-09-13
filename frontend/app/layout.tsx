@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <ClerkProvider>
+    <ClerkProvider afterSignOutUrl="/">
       <html lang="en">
         <body className="min-h-screen bg-slate-50 text-slate-900 antialiased">
           <header className="border-b border-slate-200 bg-white">
@@ -26,7 +26,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   </SignInButton>
                 </Show>
                 <Show when="signed-in">
-                  <UserButton afterSignOutUrl="/" />
+                  <UserButton />
                 </Show>
               </div>
             </div>

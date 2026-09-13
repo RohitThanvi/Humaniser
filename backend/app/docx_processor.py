@@ -52,7 +52,12 @@ from docx.table import Table, _Cell
 from docx.text.paragraph import Paragraph
 
 from app import guardrails
-from app.humanizer import HumanizerClient, RETRY_VARIATION_SUFFIX, build_fact_retry_prompt
+from app.humanizer import (
+    HumanizationFailed,
+    HumanizerClient,
+    RETRY_VARIATION_SUFFIX,
+    build_fact_retry_prompt,
+)
 
 logger = logging.getLogger("docx_processor")
 
@@ -119,6 +124,7 @@ class ProcessStats:
     paragraphs_skipped_image: int = 0
     paragraphs_skipped_reference: int = 0
     paragraphs_fallback_unmask_failed: int = 0
+    paragraphs_llm_failed: int = 0
     paragraphs_retried: int = 0
     sentences_total: int = 0
     sentences_protected: int = 0
@@ -239,13 +245,34 @@ async def humanize_docx(input_path: str, output_path: str) -> ProcessStats:
 
     if jobs:
         try:
-            results = await asyncio.gather(*(first_pass(j, i) for i, j in enumerate(jobs)))
+            results = await asyncio.gather(
+                *(first_pass(j, i) for i, j in enumerate(jobs)),
+                return_exceptions=True,
+            )
         except Exception as exc:  # noqa: BLE001
+            # Should be unreachable now that gather uses return_exceptions,
+            # but keep a hard fail-safe so a truly unexpected error still
+            # degrades to "keep originals" rather than a 500.
             logger.exception("Batch humanization failed")
             stats.errors.append(str(exc))
-            results = [j.masked_text for j in jobs]  # fail safe: keep originals (still masked)
+            results = [HumanizationFailed(j.masked_text, str(exc)) for j in jobs]
 
         for job, raw_result in zip(jobs, results):
+            if isinstance(raw_result, HumanizationFailed):
+                # The LLM call genuinely failed after every retry — keep
+                # the original text, but count and report this as a real
+                # failure rather than a silent "successful" no-op rewrite.
+                job.rewritten_text = job.original_text
+                job.fell_back = True
+                stats.paragraphs_llm_failed += 1
+                stats.errors.append(f"Paragraph humanization failed: {raw_result.reason}")
+                continue
+            if isinstance(raw_result, Exception):
+                job.rewritten_text = job.original_text
+                job.fell_back = True
+                stats.paragraphs_llm_failed += 1
+                stats.errors.append(f"Paragraph humanization failed: {raw_result}")
+                continue
             unmasked, ok = guardrails.unmask_protected_spans(raw_result, job.mapping)
             if not ok:
                 # Model dropped/duplicated a lock token — never risk a
@@ -292,9 +319,20 @@ async def humanize_docx(input_path: str, output_path: str) -> ProcessStats:
                 return await client.humanize(job.masked_text, style_seed=seed, extra_instruction=instruction)
 
             retry_results = await asyncio.gather(
-                *(retry_pass(job, i, instr) for i, (job, instr) in enumerate(retry_jobs))
+                *(retry_pass(job, i, instr) for i, (job, instr) in enumerate(retry_jobs)),
+                return_exceptions=True,
             )
             for (job, instruction), raw_result in zip(retry_jobs, retry_results):
+                if isinstance(raw_result, Exception):
+                    # Retry failed outright — keep the first-pass result,
+                    # already validated above; just note it happened.
+                    reason = (
+                        raw_result.reason
+                        if isinstance(raw_result, HumanizationFailed)
+                        else str(raw_result)
+                    )
+                    stats.errors.append(f"Retry pass failed for a paragraph: {reason}")
+                    continue
                 unmasked, ok = guardrails.unmask_protected_spans(raw_result, job.mapping)
                 if not ok:
                     continue  # keep the first-pass result, already validated above

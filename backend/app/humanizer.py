@@ -159,6 +159,18 @@ new output.
 """
 
 
+class HumanizationFailed(Exception):
+    """Raised when every retry attempt for a paragraph is exhausted.
+    Carries the untouched (masked) input so the caller can decide how
+    to fall back, but — unlike silently returning that text as if it
+    were a real rewrite — this makes the failure visible to stats."""
+
+    def __init__(self, original_text: str, reason: str) -> None:
+        super().__init__(reason)
+        self.original_text = original_text
+        self.reason = reason
+
+
 class HumanizerClient:
     def __init__(self) -> None:
         self.settings = get_settings()
@@ -189,6 +201,7 @@ class HumanizerClient:
         temp = temperature if temperature is not None else random.uniform(0.65, 0.9)
 
         async with self._sem:
+            last_reason = "unknown error"
             for attempt in range(1, self.settings.LLM_MAX_RETRIES + 1):
                 try:
                     return await self._call_api(text, system_prompt, temp)
@@ -200,13 +213,13 @@ class HumanizerClient:
                     # exponentially with jitter so many concurrent
                     # paragraph calls don't all retry in lockstep and
                     # immediately trip the limit again.
+                    last_reason = f"rate limited (429): {exc}"
                     if attempt == self.settings.LLM_MAX_RETRIES:
                         logger.error(
-                            "Rate limited %s times on this paragraph, giving up — "
-                            "returning original text untouched.",
+                            "Rate limited %s times on this paragraph, giving up.",
                             attempt,
                         )
-                        return text
+                        raise HumanizationFailed(text, last_reason) from exc
                     wait = exc.retry_after
                     if wait is None:
                         wait = min(60.0, (2 ** attempt)) + random.uniform(0, 1.0)
@@ -217,11 +230,12 @@ class HumanizerClient:
                     await asyncio.sleep(wait)
                 except Exception as exc:  # noqa: BLE001
                     logger.warning("Humanize attempt %s failed: %s", attempt, exc)
+                    last_reason = str(exc)
                     if attempt == self.settings.LLM_MAX_RETRIES:
-                        logger.error("Giving up, returning original text untouched.")
-                        return text
+                        logger.error("Giving up on this paragraph after %s attempts.", attempt)
+                        raise HumanizationFailed(text, last_reason) from exc
                     await asyncio.sleep(1.5 * attempt + random.uniform(0, 0.5))
-        return text
+        raise HumanizationFailed(text, last_reason)
 
     async def _call_api(self, text: str, system_prompt: str, temperature: float) -> str:
         settings = self.settings
