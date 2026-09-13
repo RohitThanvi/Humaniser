@@ -19,7 +19,6 @@ export default function Uploader() {
     setStatus("idle");
     setStats(null);
     setDownloadUrl(null);
-    setJobId(null);
     setError(null);
   };
 
@@ -46,7 +45,6 @@ export default function Uploader() {
     try {
       const result = await humanizeDocument(file, () => getToken());
       setStats(result.stats);
-      setJobId(result.job_id);
       const blobUrl = await fetchDownloadBlobUrl(result.job_id, () => getToken());
       setDownloadUrl(blobUrl);
       setStatus("done");
