@@ -8,6 +8,7 @@ export type HumanizeStats = {
   paragraphs_fallback_unmask_failed: number;
   paragraphs_llm_failed: number;
   paragraphs_retried: number;
+  paragraphs_noop_first_pass: number;
   sentences_total: number;
   sentences_protected: number;
   sentences_humanized: number;

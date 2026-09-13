@@ -55,6 +55,7 @@ from app import guardrails
 from app.humanizer import (
     HumanizationFailed,
     HumanizerClient,
+    NO_OP_RETRY_SUFFIX,
     RETRY_VARIATION_SUFFIX,
     build_fact_retry_prompt,
 )
@@ -126,6 +127,7 @@ class ProcessStats:
     paragraphs_fallback_unmask_failed: int = 0
     paragraphs_llm_failed: int = 0
     paragraphs_retried: int = 0
+    paragraphs_noop_first_pass: int = 0
     sentences_total: int = 0
     sentences_protected: int = 0
     sentences_humanized: int = 0
@@ -302,6 +304,15 @@ async def humanize_docx(input_path: str, output_path: str) -> ProcessStats:
         retry_jobs: list[tuple[ParagraphJob, str]] = []
         for job in jobs:
             if job.fell_back or job.rewritten_text is None:
+                continue
+            is_noop = job.rewritten_text.strip() == job.original_text.strip()
+            # Only force a retry on genuinely substantive paragraphs —
+            # a 2-3 word caption or label may legitimately have nothing
+            # to restructure, and forcing a retry there just burns an
+            # API call for no benefit.
+            if is_noop and len(job.original_text.split()) > 6:
+                stats.paragraphs_noop_first_pass += 1
+                retry_jobs.append((job, NO_OP_RETRY_SUFFIX))
                 continue
             missing = guardrails.missing_numbers(job.original_text, job.rewritten_text)
             if missing:

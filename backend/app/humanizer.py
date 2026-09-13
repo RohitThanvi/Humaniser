@@ -181,6 +181,17 @@ reuse your previous phrasing.
 """
 
 
+NO_OP_RETRY_SUFFIX = """
+ADDITIONAL INSTRUCTION FOR THIS RETRY: your previous rewrite of this
+paragraph came back word-for-word identical to the input — you made
+no change at all. That is not acceptable, even for a short or
+citation-heavy paragraph. Change the opening word, reorder the
+free-text portion around the locked content, or restate the same
+fact in a different sentence shape — anything, as long as it is not
+the same wording again.
+"""
+
+
 def build_fact_retry_prompt(missing_numbers: list[str]) -> str:
     joined = ", ".join(missing_numbers)
     return f"""

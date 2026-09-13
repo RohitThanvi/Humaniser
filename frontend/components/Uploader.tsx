@@ -119,6 +119,7 @@ export default function Uploader() {
             <Stat label="Citations/science protected" value={stats.sentences_protected} />
             <Stat label="Paragraphs auto-retried" value={stats.paragraphs_retried} />
             <Stat label="Paragraphs LLM failed" value={stats.paragraphs_llm_failed} />
+            <Stat label="No-op rewrites caught" value={stats.paragraphs_noop_first_pass} />
           </dl>
           <div className="mt-4 rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-600">
             <span className="font-medium text-slate-800">Sentence-length variation (burstiness):</span>{" "}
