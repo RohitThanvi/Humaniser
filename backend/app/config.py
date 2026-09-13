@@ -33,6 +33,7 @@ class Settings:
     LLM_MAX_RETRIES: int = int(os.getenv("LLM_MAX_RETRIES", "5"))
     LLM_CONCURRENCY: int = int(os.getenv("LLM_CONCURRENCY", "5"))
     LLM_REQUESTS_PER_MINUTE: int = int(os.getenv("LLM_REQUESTS_PER_MINUTE", "0"))
+    LLM_REQUEST_DELAY_SECONDS: float = float(os.getenv("LLM_REQUEST_DELAY_SECONDS", "0"))
 
 
 @lru_cache

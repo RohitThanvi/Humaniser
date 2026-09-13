@@ -240,7 +240,15 @@ class HumanizerClient:
             for attempt in range(1, self.settings.LLM_MAX_RETRIES + 1):
                 await self._rate_limiter.acquire()
                 try:
-                    return await self._call_api(text, system_prompt, temp)
+                    result = await self._call_api(text, system_prompt, temp)
+                    if self.settings.LLM_REQUEST_DELAY_SECONDS > 0:
+                        # Held while still inside the semaphore, so with
+                        # LLM_CONCURRENCY=1 the next queued paragraph
+                        # can't start until this gap has fully elapsed —
+                        # a genuine one-at-a-time queue, not just a cap
+                        # on how many calls are in flight simultaneously.
+                        await asyncio.sleep(self.settings.LLM_REQUEST_DELAY_SECONDS)
+                    return result
                 except RateLimitError as exc:
                     # 429 — the provider is telling us to slow down, not
                     # that the request is bad. Retry more patiently than a
