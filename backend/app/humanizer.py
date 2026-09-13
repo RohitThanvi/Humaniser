@@ -10,15 +10,49 @@ Design goals:
     markdown — this text is spliced back into the original docx run.
 """
 import asyncio
+import collections
 import logging
 import random
 import re
+import time
 
 import httpx
 
 from app.config import get_settings
 
 logger = logging.getLogger("humanizer")
+
+
+class RateLimiter:
+    """Sliding-window limiter: at most `max_calls` calls started in any
+    rolling `period_seconds` window.
+
+    This is deliberately separate from the concurrency semaphore below.
+    Concurrency only caps how many requests are in flight *at once* — if
+    each call returns in ~1s, a concurrency of 5 can still fire 300
+    requests/minute at the provider, which is exactly what trips 429s.
+    This limiter paces actual request *rate* against a real budget.
+    """
+
+    def __init__(self, max_calls: int, period_seconds: float = 60.0) -> None:
+        self.max_calls = max_calls
+        self.period = period_seconds
+        self._timestamps: "collections.deque[float]" = collections.deque()
+        self._lock = asyncio.Lock()
+
+    async def acquire(self) -> None:
+        if self.max_calls <= 0:
+            return  # 0 (or negative) disables the limiter entirely
+        while True:
+            async with self._lock:
+                now = time.monotonic()
+                while self._timestamps and now - self._timestamps[0] >= self.period:
+                    self._timestamps.popleft()
+                if len(self._timestamps) < self.max_calls:
+                    self._timestamps.append(now)
+                    return
+                wait = self.period - (now - self._timestamps[0])
+            await asyncio.sleep(max(wait, 0.05))
 
 
 class RateLimitError(Exception):
@@ -175,6 +209,7 @@ class HumanizerClient:
     def __init__(self) -> None:
         self.settings = get_settings()
         self._sem = asyncio.Semaphore(self.settings.LLM_CONCURRENCY)
+        self._rate_limiter = RateLimiter(self.settings.LLM_REQUESTS_PER_MINUTE)
 
     async def humanize(
         self,
@@ -203,6 +238,7 @@ class HumanizerClient:
         async with self._sem:
             last_reason = "unknown error"
             for attempt in range(1, self.settings.LLM_MAX_RETRIES + 1):
+                await self._rate_limiter.acquire()
                 try:
                     return await self._call_api(text, system_prompt, temp)
                 except RateLimitError as exc:

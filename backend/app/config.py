@@ -32,6 +32,7 @@ class Settings:
     LLM_TIMEOUT_SECONDS: int = int(os.getenv("LLM_TIMEOUT_SECONDS", "60"))
     LLM_MAX_RETRIES: int = int(os.getenv("LLM_MAX_RETRIES", "5"))
     LLM_CONCURRENCY: int = int(os.getenv("LLM_CONCURRENCY", "5"))
+    LLM_REQUESTS_PER_MINUTE: int = int(os.getenv("LLM_REQUESTS_PER_MINUTE", "0"))
 
 
 @lru_cache
